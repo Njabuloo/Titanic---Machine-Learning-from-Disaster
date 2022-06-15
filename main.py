@@ -23,7 +23,12 @@ from sklearn.ensemble import AdaBoostClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.model_selection import cross_val_score
+from sklearn.model_selection import cross_val_predict
 from sklearn.svm import SVC
+from sklearn.metrics import confusion_matrix
+from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
+from sklearn.metrics import roc_auc_score
+from sklearn.metrics import roc_curve
 
 
 def info_on_data(df):
@@ -120,7 +125,7 @@ def knn_cross_val(X, y):
         print(np.mean(score))
 
 def Find_CV_ALL(X,y):
-    random_forest = RandomForestClassifier(bootstrap=True, criterion='gini', max_features='sqrt', min_samples_leaf=1, min_samples_split=10, n_estimators=20)
+    random_forest = RandomForestClassifier(bootstrap=True, criterion='entropy', max_features='sqrt', min_samples_leaf=3, min_samples_split=6, n_estimators=100)
     # random_forest.fit(X_train, y_train)
     score = cross_val_score(random_forest, X, y, cv=5)
     print("Random Forest CV:")
@@ -243,14 +248,14 @@ test['sexYclass'] = test['Sex']*test['Pclass']
 df['Fare/Person'] = df['Fare']/(df['Parch']+df['SibSp']+1)
 test['Fare/Person'] = test['Fare']/(test['Parch']+test['SibSp']+1)
 
-df['nr_fam'] = df['Parch']+df['SibSp']
-test['nr_fam'] = test['Parch']+test['SibSp']
+df['nr_fam'] = df['Parch']+df['SibSp']+1
+test['nr_fam'] = test['Parch']+test['SibSp']+1
 
 df.drop('Parch',axis=1,inplace=True)
 test.drop('Parch',axis=1,inplace=True)
 
-df.drop('Embarked',axis=1,inplace=True)
-test.drop('Embarked',axis=1,inplace=True)
+# df.drop('Embarked',axis=1,inplace=True)
+# test.drop('Embarked',axis=1,inplace=True)
 
 df.drop('SibSp',axis=1,inplace=True)
 test.drop('SibSp',axis=1,inplace=True)
@@ -310,7 +315,7 @@ score = cross_val_score(bag, X, y, cv=5)
 # bag.fit(X_train, y_train)
 print('With Bagging:')
 # print(bag.score(X_test, y_test))
-print((score))
+print(np.mean(score))
 bag.fit(X,y)
 
 boost = AdaBoostClassifier(algorithm='SAMME',base_estimator=linear_model.LogisticRegression(solver='liblinear'),n_estimators=50,learning_rate=1.5)
@@ -319,17 +324,39 @@ score = cross_val_score(boost, X, y, cv=5)
 # boost.fit(X_train, y_train)
 print('With Boosting')
 # print(boost.score(X_test, y_test))
-print((score))
+print(np.mean(score))
 boost.fit(X,y)
 
-random_forest = RandomForestClassifier(bootstrap=True, criterion='gini', max_features='sqrt', min_samples_leaf=1, min_samples_split=10, n_estimators=100)
+random_forest = RandomForestClassifier(bootstrap=True, criterion='entropy', max_features='sqrt', min_samples_leaf=3, min_samples_split=6, n_estimators=100)
 # random_forest.fit(X_train, y_train)
-score = cross_val_score(random_forest, X, y, cv=5)
+Input = StandardScaler().fit_transform(X)
+score = cross_val_score(random_forest, Input, y, cv=5)
+predict = cross_val_predict(random_forest,Input,y,cv=5)
+print(confusion_matrix(y,predict))
+print('accuracy: ', accuracy_score(y, predict))
+print('precision: ', precision_score(y, predict))
+print('recall: ', recall_score(y, predict))
+print('f1: ', f1_score(y, predict))
+false_positive_rate, true_positive_rate, thresholds = roc_curve(y, predict)
+print('ROC Score:', roc_auc_score(y, predict))
+
+# plotting them against each other
+def plot_roc_curve(false_positive_rate, true_positive_rate, label=None):
+    plt.plot(false_positive_rate, true_positive_rate, linewidth=2, label=label)
+    plt.plot([0, 1], [0, 1], 'r', linewidth=4)
+    plt.axis([0, 1, 0, 1])
+    plt.xlabel('False Positive Rate (FPR)', fontsize=16)
+    plt.ylabel('True Positive Rate (TPR)', fontsize=16)
+
+plt.figure(figsize=(14, 7))
+plot_roc_curve(false_positive_rate, true_positive_rate)
+plt.show()
+
 print('Random Forest:')
 # print(random_forest.score(X_test, y_test))
 print((score))
 
-random_forest.fit(X,y)
+random_forest.fit(Input,y)
 
 # ''' Feature Importance Random Forest
 ft_imp = pd.Series(random_forest.feature_importances_, index=df.columns).sort_values(ascending=False)
@@ -349,6 +376,7 @@ print(gs.best_params_)
 # RESULT: {'bootstrap': 'False', 'criterion': 'entropy', 'max_features': 'sqrt', 'min_samples_leaf': 5, 'min_samples_split': 8, 'n_estimators': 10}
 # RESULT: {'bootstrap': 'False', 'criterion': 'entropy', 'max_features': 'log2', 'min_samples_leaf': 3, 'min_samples_split': 6, 'n_estimators': 10}
 # RESULT: {'bootstrap': 'True', 'criterion': 'entropy', 'max_depth': 10, 'max_features': 'log2', 'min_samples_leaf': 3, 'min_samples_split': 10, 'n_estimators': 20}
+# RESULT: {'bootstrap': 'True', 'criterion': 'entropy', 'max_features': 'log2', 'min_samples_leaf': 3, 'min_samples_split': 6, 'n_estimators': 20}
 '''
 
 
@@ -378,13 +406,24 @@ model.fit(X,y)
 
 print(";;;")
 
+'''
 ### Sub Stuff
-
-info_on_data(test)
+test['Sex'].mask(((test['Sex'] == 0) & (test['Age'] < 5)), 1, inplace=True)
+test['Sex'].mask(((test['Sex'] == 1) & (test['Embarked'] == 2) & (test['Pclass'] != 1)), 0, inplace=True)
+# test['Sex'].mask(((test['Sex'] == 1) & (test['Embarked'] == 1) & (test['Pclass'] == 3)), 0, inplace=True)
+test['Sex'].mask(((test['Sex'] == 1) & (test['nr_fam'] > 6)), 0, inplace=True)
+# test['Sex'].mask(((test['Pclass'] == 3) & (test['Age'] >= 18)), 0, inplace=True)
+# test['Sex'].mask(((test['Pclass'] == 3) & (test['Age'] >= 18)), 0, inplace=True)
+# test['Sex'].mask(((test['Pclass'] == 1)), 1, inplace=True)
+'''
+# info_on_data(test)
 test_set = test.values
 
-predictions = random_forest.predict(test_set)
+Input1 = StandardScaler().fit_transform(test_set)
 
+predictions = random_forest.predict(Input1)
+
+# test_dict = {'PassengerId':pass_id, 'Survived':test['Sex'].values}
 test_dict = {'PassengerId':pass_id, 'Survived':predictions}
 
 
